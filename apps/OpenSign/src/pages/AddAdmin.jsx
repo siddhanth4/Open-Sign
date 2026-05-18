@@ -33,6 +33,7 @@ const AddAdmin = () => {
   const [isAuthorize, setIsAuthorize] = useState(false);
   const [isSubscribeNews, setIsSubscribeNews] = useState(false);
   const [errMsg, setErrMsg] = useState("");
+  const [isAdminExists, setIsAdminExists] = useState(false);
   const [state, setState] = useState({
     loading: false,
     alertType: "success",
@@ -51,7 +52,8 @@ const AddAdmin = () => {
       if (app?.error === "invalid_json") {
         setErrMsg(t("server-down", { appName: appName }));
       } else if (app?.user === "exist") {
-        setErrMsg(t("admin-exists"));
+        // Admin already exists - show signup form
+        setIsAdminExists(true);
       }
     } catch (err) {
       setErrMsg(t("something-went-wrong-mssg"));
@@ -100,7 +102,9 @@ const AddAdmin = () => {
           email: email?.toLowerCase()?.replace(/\s/g, ""),
           phone: phone,
           company: company,
-          jobTitle: jobTitle
+          jobTitle: jobTitle,
+          role: isAdminExists ? "contracts_User" : "contracts_Admin",
+          timezone: usertimezone
         };
         localStorage.setItem("userDetails", JSON.stringify(userDetails));
         try {
@@ -120,12 +124,14 @@ const AddAdmin = () => {
                 name: name,
                 email: email?.toLowerCase()?.replace(/\s/g, ""),
                 phone: phone,
-                role: "contracts_Admin",
+                role: isAdminExists ? "contracts_User" : "contracts_Admin",
                 timezone: usertimezone
               }
             };
             try {
-              const usersignup = await Parse.Cloud.run("addadmin", params);
+              // Use usersignup for regular users, addadmin for first admin
+              const cloudFunction = isAdminExists ? "usersignup" : "addadmin";
+              const usersignup = await Parse.Cloud.run(cloudFunction, params);
               if (usersignup) {
                 if (isSubscribeNews) {
                   subscribeNewsletter();
@@ -281,21 +287,22 @@ const AddAdmin = () => {
               <form onSubmit={handleSubmit}>
                 <div className="w-full my-4 op-card bg-base-100 shadow-md outline outline-1 outline-slate-300/50">
                   <h2 className="text-[30px] text-center mt-3 font-medium">
-                    {t("opensign-setup", { appName })}
+                    {isAdminExists ? t("User Registration") : t("opensign-setup", { appName })}
                   </h2>
-                  <NavLink
-                    to="https://discord.com/invite/xe9TDuyAyj"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-center text-sm mt-1 text-[blue] cursor-pointer"
-                  >
-                    {t("join-discord")}
-                    <i
-                      aria-hidden="true"
-                      className="fa-brands fa-discord ml-1"
-                    ></i>
-                    {/* <span className="fa-sr-only">OpenSign&apos;s Discord</span> */}
-                  </NavLink>
+                  {!isAdminExists && (
+                    <NavLink
+                      to="https://discord.com/invite/xe9TDuyAyj"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-center text-sm mt-1 text-[blue] cursor-pointer"
+                    >
+                      {t("join-discord")}
+                      <i
+                        aria-hidden="true"
+                        className="fa-brands fa-discord ml-1"
+                      ></i>
+                    </NavLink>
+                  )}
                   <div className="px-6 py-3 text-xs">
                     <label className="block ">
                       {t("name")}{" "}
@@ -447,7 +454,7 @@ const AddAdmin = () => {
                           e.target.setCustomValidity(t("input-required"))
                         }
                         onInput={(e) => e.target.setCustomValidity("")}
-                        required
+                        required={!isAdminExists}
                       />
                       <label
                         className="text-xs cursor-pointer ml-1 mb-0"
@@ -455,33 +462,39 @@ const AddAdmin = () => {
                       >
                         {t("agree")}
                       </label>
-                      <span
-                        className="underline cursor-pointer ml-1"
-                        onClick={() =>
-                          openInNewTab(
-                            "https://www.opensignlabs.com/terms-and-conditions"
-                          )
-                        }
-                      >
-                        {t("term")}
-                      </span>
-                      <span>.</span>
+                      {!isAdminExists && (
+                        <>
+                          <span
+                            className="underline cursor-pointer ml-1"
+                            onClick={() =>
+                              openInNewTab(
+                                "https://www.opensignlabs.com/terms-and-conditions"
+                              )
+                            }
+                          >
+                            {t("term")}
+                          </span>
+                          <span>.</span>
+                        </>
+                      )}
                     </div>
-                    <div className="mt-2.5 ml-1 flex flex-row items-center">
-                      <input
-                        type="checkbox"
-                        className="op-checkbox op-checkbox-sm"
-                        id="subscribetoopensign"
-                        checked={isSubscribeNews}
-                        onChange={(e) => setIsSubscribeNews(e.target.checked)}
-                      />
-                      <label
-                        className="text-xs cursor-pointer ml-1 mb-0"
-                        htmlFor="subscribetoopensign"
-                      >
-                        {t("subscribe-to-opensign")}
-                      </label>
-                    </div>
+                    {!isAdminExists && (
+                      <div className="mt-2.5 ml-1 flex flex-row items-center">
+                        <input
+                          type="checkbox"
+                          className="op-checkbox op-checkbox-sm"
+                          id="subscribetoopensign"
+                          checked={isSubscribeNews}
+                          onChange={(e) => setIsSubscribeNews(e.target.checked)}
+                        />
+                        <label
+                          className="text-xs cursor-pointer ml-1 mb-0"
+                          htmlFor="subscribetoopensign"
+                        >
+                          {t("subscribe-to-opensign")}
+                        </label>
+                      </div>
+                    )}
                   </div>
                   <div className="mx-4 text-center text-xs font-bold mb-3">
                     <button
@@ -489,8 +502,16 @@ const AddAdmin = () => {
                       className="op-btn op-btn-primary w-full"
                       disabled={state.loading}
                     >
-                      {state.loading ? t("loading") : t("next")}
+                      {state.loading ? t("loading") : (isAdminExists ? t("sign-up") : t("next"))}
                     </button>
+                    {isAdminExists && (
+                      <NavLink
+                        to="/"
+                        className="text-center text-xs mt-2 text-[blue] underline cursor-pointer block"
+                      >
+                        {t("back-to-login")}
+                      </NavLink>
+                    )}
                   </div>
                 </div>
               </form>

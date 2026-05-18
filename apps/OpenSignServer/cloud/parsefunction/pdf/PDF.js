@@ -395,8 +395,15 @@ async function PDF(req) {
     const username = signUser.Name;
     const userEmail = signUser.Email;
     if (req.params.pdfFile) {
-      //  `PdfBuffer` used to create buffer from pdf file
-      let PdfBuffer = Buffer.from(req.params.pdfFile, 'base64');
+      // `PdfBuffer` used to create buffer from pdf file. Accept either a base64 string (legacy) or a Uint8Array/Buffer.
+      let PdfBuffer;
+      if (typeof req.params.pdfFile === 'string') {
+        // Legacy case: base64 encoded string
+        PdfBuffer = Buffer.from(req.params.pdfFile, 'base64');
+      } else {
+        // New case: Uint8Array or Buffer passed directly from frontend
+        PdfBuffer = Buffer.from(req.params.pdfFile);
+      }
       //  `P12Buffer` used to create buffer from p12 certificate
       let pfxFile = process.env.PFX_BASE64;
       let passphrase = process.env.PASS_PHRASE;

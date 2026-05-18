@@ -17,6 +17,7 @@ const buttonList = [
     redirectType: "Form",
     icon: "fa-light fa-paper-plane"
   }
+  
 ];
 const GetDashboard = (props) => {
   const { t } = useTranslation();

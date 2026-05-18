@@ -17,6 +17,11 @@ import { app as customRoute } from './cloud/customRoute/customApp.js';
 import { exec } from 'child_process';
 import { createTransport } from 'nodemailer';
 import { appName, cloudServerUrl, serverAppId, smtpenable, smtpsecure, useLocal } from './Utils.js';
+
+// Disabled SSL certificate validation was previously forced here, but it conflicts with the
+// `tlsAllowInvalidCertificates` option used in the MongoDB connection string. The driver now
+// handles invalid certificates via the connection string, so we no longer set this env var.
+// If needed for other development scenarios, set it conditionally based on an explicit flag.
 import { SSOAuth } from './auth/authadapter.js';
 import runDbMigrations from './migrationdb/index.js';
 import { validateSignedLocalUrl } from './cloud/parsefunction/getSignedUrl.js';

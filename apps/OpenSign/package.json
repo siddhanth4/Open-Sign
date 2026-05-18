@@ -124,7 +124,7 @@
     "@testing-library/user-event": "^14.6.1",
     "@types/react": "^19.2.14",
     "@vitejs/plugin-react": "^5.1.4",
-    "@vitest/ui": "^4.0.18",
+    "@vitest/ui": "^4.1.6",
     "autoprefixer": "^10.4.27",
     "babel-loader": "^10.0.0",
     "commitizen": "^4.3.1",

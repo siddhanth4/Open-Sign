@@ -90,7 +90,7 @@ async function updateDoc(docId, url, userId, ipAddress, data, className, sign, d
 
     const auditTrail = updateAuditTrail.filter(x => x.Activity === 'Signed');
     let isCompleted = false;
-    if (data.Signers && data.Signers.length > 0) {
+    if (Array.isArray(data.Signers) && data.Signers.length > 0) {
       //'removePrefill' is used to remove prefill role from placeholders filed then compare length to change status of document
       const removePrefill =
         data.Placeholders.length > 0 && data.Placeholders.filter(x => x.Role !== 'prefill');
@@ -378,41 +378,104 @@ async function PDF(req) {
     }
     const _resDoc = resDoc?.toJSON();
     let signUser;
-    let className;
-    // `reqUserId` is send throught pdfrequest signing flow
-    if (reqUserId) {
-      // to get contracts_Contactbook details for currentuser from reqUserId
-      const _contractUser = _resDoc.Signers.find(x => x.objectId === reqUserId);
-      if (_contractUser) {
-        signUser = _contractUser;
-        className = 'contracts_Contactbook';
-      }
-    } else {
-      className = 'contracts_Users';
-      signUser = _resDoc.ExtUserPtr;
-    }
+let className;
+
+// Safe Signers array
+const signers = Array.isArray(_resDoc.Signers)
+  ? _resDoc.Signers
+  : [];
+
+// Request came from signer flow
+if (reqUserId && signers.length > 0) {
+  const _contractUser = signers.find(
+    x => x.objectId === reqUserId
+  );
+
+  if (_contractUser) {
+    signUser = _contractUser;
+    className = 'contracts_Contactbook';
+  }
+}
+
+// Fallback to self-sign owner flow
+if (!signUser) {
+  className = 'contracts_Users';
+  signUser = _resDoc.ExtUserPtr;
+}
+
+// Extra validation
+if (!signUser) {
+  throw new Error('Unable to determine signing user');
+}
 
     const username = signUser.Name;
     const userEmail = signUser.Email;
-    if (req.params.pdfFile) {
-      // `PdfBuffer` used to create buffer from pdf file. Accept either a base64 string (legacy) or a Uint8Array/Buffer.
-      let PdfBuffer;
+    
+    // Validate that pdfFile parameter is present and has content
+    if (!req.params.pdfFile) {
+      console.log('ERROR: pdfFile is undefined or empty. req.params:', Object.keys(req.params));
+      const error = new Error('PDF file parameter is missing or empty');
+      error.code = 400;
+      throw error;
+    }
+    
+    // `PdfBuffer` used to create buffer from pdf file. Accept either a base64 string or Uint8Array.
+    let PdfBuffer;
+    try {
       if (typeof req.params.pdfFile === 'string') {
-        // Legacy case: base64 encoded string
+        // Base64 encoded string from frontend
+        if (!req.params.pdfFile.trim()) {
+          throw new Error('pdfFile string is empty');
+        }
         PdfBuffer = Buffer.from(req.params.pdfFile, 'base64');
-      } else {
-        // New case: Uint8Array or Buffer passed directly from frontend
+      } else if (Buffer.isBuffer(req.params.pdfFile) || ArrayBuffer.isView(req.params.pdfFile)) {
+        // Uint8Array or Buffer passed directly
         PdfBuffer = Buffer.from(req.params.pdfFile);
+      } else {
+        throw new Error(`Invalid pdfFile type: ${typeof req.params.pdfFile}`);
       }
-      //  `P12Buffer` used to create buffer from p12 certificate
-      let pfxFile = process.env.PFX_BASE64;
-      let passphrase = process.env.PASS_PHRASE;
-      if (_resDoc?.ExtUserPtr?.TenantId?.PfxFile?.base64) {
-        pfxFile = _resDoc?.ExtUserPtr?.TenantId?.PfxFile?.base64;
-        passphrase = _resDoc?.ExtUserPtr?.TenantId?.PfxFile?.password;
+      
+      if (!PdfBuffer || PdfBuffer.length === 0) {
+        throw new Error('Failed to create valid buffer from pdfFile');
       }
-      const pfx = { name: pfxname, passphrase: passphrase };
-      const P12Buffer = Buffer.from(pfxFile, 'base64');
+    } catch (bufferErr) {
+      console.log('ERROR creating buffer from pdfFile:', bufferErr.message);
+      const error = new Error(`Failed to create buffer from pdfFile: ${bufferErr.message}`);
+      error.code = 400;
+      throw error;
+    }
+    
+    if (PdfBuffer && PdfBuffer.length > 0) {
+      // `P12Buffer` used to create buffer from p12 certificate
+      // Default certificate from .env
+let pfxFile = process.env.PFX_BASE64 || null;
+let passphrase = process.env.PASS_PHRASE || '';
+
+// Tenant-specific certificate overrides env
+if (_resDoc?.ExtUserPtr?.TenantId?.PfxFile?.base64) {
+  pfxFile = _resDoc.ExtUserPtr.TenantId.PfxFile.base64;
+  passphrase =
+    _resDoc.ExtUserPtr.TenantId.PfxFile.password || '';
+}
+
+// Validate certificate existence
+if (!pfxFile) {
+  throw new Error(
+    'PFX certificate not found. Please configure PFX_BASE64 in .env or Tenant PfxFile.'
+  );
+}
+
+const pfx = {
+  name: pfxname,
+  passphrase: passphrase,
+};
+
+// Create certificate buffer safely
+const P12Buffer = Buffer.from(pfxFile, 'base64');
+
+if (!P12Buffer || P12Buffer.length === 0) {
+  throw new Error('Invalid PFX certificate buffer');
+}
       fs.writeFileSync(pfxname, P12Buffer);
       const UserPtr = { __type: 'Pointer', className: className, objectId: signUser.objectId };
       const obj = { UserPtr: UserPtr, SignedUrl: '', Activity: 'Signed', ipAddress: userIP };
@@ -425,7 +488,8 @@ async function PDF(req) {
 
       const auditTrail = updateAuditTrail.filter(x => x.Activity === 'Signed');
       let isCompleted = false;
-      if (_resDoc.Signers && _resDoc.Signers.length > 0) {
+      //if (_resDoc.Signers && _resDoc.Signers.length > 0) {
+      if (signers.length > 0) {
         const removePrefill =
           _resDoc?.Placeholders?.length > 0 &&
           _resDoc?.Placeholders?.filter(x => x?.Role !== 'prefill');

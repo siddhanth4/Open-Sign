@@ -14,6 +14,7 @@ import { ApiPayloadConverter } from 'parse-server-api-mail-adapter';
 import S3Adapter from '@parse/s3-files-adapter';
 import FSFilesAdapter from '@parse/fs-files-adapter';
 import { app as customRoute } from './cloud/customRoute/customApp.js';
+import signPdfRoute from './routes/signPdfRoute.js';
 import { exec } from 'child_process';
 import { createTransport } from 'nodemailer';
 import { appName, cloudServerUrl, serverAppId, smtpenable, smtpsecure, useLocal } from './Utils.js';
@@ -234,6 +235,10 @@ if (!process.env.TESTING) {
 }
 // Mount your custom express app
 app.use('/', customRoute);
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+// Mount the file upload endpoint for PDF signing
+app.use("/api", signPdfRoute);
 
 // Parse Server plays nicely with the rest of your web routes
 app.get('/', function (req, res) {

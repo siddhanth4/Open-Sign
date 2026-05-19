@@ -1,7 +1,7 @@
 // import { useState, useRef, useEffect } from "react";
 // import { PDFDocument } from "pdf-lib";
 // import "../styles/signature.css";
-// import Parse from "parse";
+//import Parse from "parse";
 // import Confetti from "react-confetti";
 // import axios from "axios";
 // import RenderAllPdfPage from "../components/pdf/RenderAllPdfPage";
@@ -2406,18 +2406,58 @@ function SignYourSelf() {
       return;
     }
 
-    const params = {
-      pdfFile: base64Url,
+    // Convert base64 PDF string to a Blob for multipart upload
+    const base64ToBlob = (base64, mime) => {
+      const binary = atob(base64);
+      const len = binary.length;
+      const buffer = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        buffer[i] = binary.charCodeAt(i);
+      }
+      return new Blob([buffer], { type: mime });
+    };
+
+    // Prepare FormData with the PDF file and other parameters
+    const pdfBlob = base64ToBlob(base64Url, "application/pdf");
+    const formData = new FormData();
+    formData.append("pdfFile", pdfBlob, "document.pdf");
+
+    // Additional metadata sent as query parameters (or could be form fields)
+    const currentUser = Parse.User.current();
+    const userId = currentUser?.id;
+    const sessionToken = currentUser?.getSessionToken?.();
+
+    const queryParams = new URLSearchParams({
       docId: documentId,
+      userId: userId || "",
       isCustomCompletionMail: isCustomCompletionMail,
       signature: suffixbase64
-    };
-    const resSignPdf = await Parse.Cloud.run("signPdf", params);
-    if (resSignPdf) {
-      const signedpdf = JSON.parse(JSON.stringify(resSignPdf));
-      setPdfUrl(signedpdf);
+    }).toString();
+
+    const BACKEND_URL = "http://localhost:8080";
+
+    const res = await fetch(
+      `${BACKEND_URL}/api/signPdf?${queryParams}`,
+      {
+        method: "POST",
+        body: formData,
+        headers: {
+          "X-Parse-Session-Token": sessionToken || ""
+        }
+      }
+    );
+    const resSignPdf = await res.json();
+    if (resSignPdf && resSignPdf.status === "success" && resSignPdf.data) {
+      setPdfUrl(resSignPdf.data);
       dispatch(setTypedSignFont("Fasthand"));
       getDocumentDetails(false);
+    } else {
+      console.error("signPdf endpoint error", resSignPdf);
+      setIsAlert({
+        header: t("error"),
+        isShow: true,
+        alertMessage: resSignPdf.message || t("something-went-wrong-mssg"),
+      });
     }
   };
   //function for save x and y position and show signature  tab on that position

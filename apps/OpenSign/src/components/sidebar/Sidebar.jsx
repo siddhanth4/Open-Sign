@@ -21,8 +21,13 @@ const Sidebar = () => {
   const [submenuOpen, setSubmenuOpen] = useState(false);
   const username = localStorage.getItem("username");
   const image = localStorage.getItem("profileImg") || dp;
-  const tenantname = localStorage.getItem("Extand_Class")
-    ? JSON.parse(localStorage.getItem("Extand_Class"))?.[0]?.Company
+  // Retrieve the role of the logged‑in user (Admin, Editor, User).
+  // The role is stored in the Extand_Class object under the "UserRole" field
+  // with a prefix like "contracts_Admin". We strip the prefix and format it.
+  const extClassRaw = localStorage.getItem("Extand_Class");
+  const userRoleRaw = extClassRaw ? JSON.parse(extClassRaw)?.[0]?.UserRole : null;
+  const roleDisplay = userRoleRaw
+    ? userRoleRaw.replace(/^contracts_/i, "") // remove prefix
     : "";
 
   useEffect(() => {
@@ -101,10 +106,10 @@ const Sidebar = () => {
           <p
             onClick={handleProfile}
             className={`cursor-pointer text-[12px] text-base-content ${
-              tenantname ? "mt-2" : ""
+              roleDisplay ? "mt-2" : ""
             }`}
           >
-            {tenantname}
+            {roleDisplay}
           </p>
         </div>
       </div>

@@ -168,9 +168,9 @@ function Login() {
         const userSettings = appInfo.settings;
         const extUser = await Parse.Cloud.run("getUserDetails");
         if (extUser) {
-          const IsDisabled = extUser?.get("IsDisabled") || false;
+          const IsDisabled = extUser?.IsDisabled || false;
           if (!IsDisabled) {
-            const userRole = extUser?.get("UserRole");
+            const userRole = extUser?.UserRole;
             const menu =
               userRole && userSettings.find((menu) => menu.role === userRole);
             if (menu) {
@@ -228,9 +228,10 @@ function Login() {
       const userSettings = appInfo.settings;
       const extUser = await Parse.Cloud.run("getUserDetails");
       if (extUser) {
-        const IsDisabled = extUser?.get("IsDisabled") || false;
+        // extUser is returned as a plain object from cloud function, so access properties directly
+        const IsDisabled = extUser?.IsDisabled || false;
         if (!IsDisabled) {
-          const userRole = extUser.get("UserRole");
+          const userRole = extUser?.UserRole;
           const _currentRole = userRole;
           const menu =
             userRole && userSettings.find((menu) => menu.role === userRole);
@@ -355,9 +356,9 @@ function Login() {
       const userSettings = appInfo.settings;
       const extUser = await Parse.Cloud.run("getUserDetails");
       if (extUser) {
-        const IsDisabled = extUser?.get("IsDisabled") || false;
+        const IsDisabled = extUser?.IsDisabled || false;
         if (!IsDisabled) {
-          const userRole = extUser?.get("UserRole");
+          const userRole = extUser?.UserRole;
           const menu =
             userRole && userSettings?.find((menu) => menu.role === userRole);
           if (menu) {
@@ -366,11 +367,11 @@ function Login() {
               location?.state?.from || `/${menu.pageType}/${menu.pageId}`;
             const _role = _currentRole.replace("contracts_", "");
             localStorage.setItem("_user_role", _role);
-            const checkLanguage = extUser?.get("Language");
+            const checkLanguage = extUser?.Language;
             if (checkLanguage) {
               checkLanguage && i18n.changeLanguage(checkLanguage);
             }
-            const extInfo = JSON.parse(JSON.stringify(extUser));
+            const extInfo = extUser; // already a plain object
             // Continue with storing user data and redirecting
             localStorage.setItem("Extand_Class", JSON.stringify([extUser]));
             localStorage.setItem("userEmail", extInfo.Email);

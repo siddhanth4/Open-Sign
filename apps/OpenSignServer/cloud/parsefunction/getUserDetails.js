@@ -22,11 +22,13 @@ async function getUserDetails(request) {
       }
       const res = await userQuery.first({ useMasterKey: true });
       if (res) {
-        if (reqEmail) {
-          return { objectId: res.id };
-        } else {
-          return res;
-        }
+        // Return the full Parse object regardless of request type.
+        // Previously, when an email was provided, a plain object with only the
+        // `objectId` was returned, causing callers that expect a Parse.Object
+        // (and thus the `.get` method) to fail with "extUser?.get is not a
+        // function". Returning the full object ensures the caller can safely
+        // access fields via `.get`.
+        return res;
       } else {
         return '';
       }

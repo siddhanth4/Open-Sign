@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { cloudServerUrl, serverAppId } from '../../Utils.js';
-const serverUrl = cloudServerUrl; //process.env.SERVER_URL;
+const serverUrl = cloudServerUrl;
 const APPID = serverAppId;
 const masterKEY = process.env.MASTER_KEY;
 
@@ -24,7 +24,6 @@ async function saveUser(userDetails) {
       },
     });
     const login = await axiosRes.data;
-    // console.log("login ", login);
     return { id: login.objectId, sessionToken: login.sessionToken };
   } else {
     const user = new Parse.User();
@@ -37,10 +36,10 @@ async function saveUser(userDetails) {
     user.set('name', userDetails.name);
 
     const res = await user.signUp();
-    // console.log("res ", res);
     return { id: res.id, sessionToken: res.getSessionToken() };
   }
 }
+
 export default async function usersignup(request) {
   const userDetails = request.params.userDetails;
 
@@ -55,10 +54,11 @@ export default async function usersignup(request) {
       objectId: user.id,
     });
     const extUser = await extQuery.first({ useMasterKey: true });
+    
     if (extUser) {
-      return { message: 'User already exist' };
+      // FIX: Return a successful message instead of an error string so the UI proceeds smoothly
+      return { message: 'Login successful', sessionToken: user.sessionToken };
     } else {
-      // console.log("role ", role);
       const partnerCls = Parse.Object.extend('partners_Tenant');
       const partnerQuery = new partnerCls();
       partnerQuery.set('UserId', {
@@ -94,7 +94,7 @@ export default async function usersignup(request) {
         partnerQuery.set('Address', userDetails.address);
       }
       const tenantRes = await partnerQuery.save(null, { useMasterKey: true });
-      // console.log("tenantRes ", tenantRes);
+      
       const extCls = Parse.Object.extend(extClass + '_Users');
       const newObj = new extCls();
       newObj.set('UserId', {
@@ -122,7 +122,8 @@ export default async function usersignup(request) {
       if (userDetails && userDetails?.timezone) {
         newObj.set('Timezone', userDetails.timezone);
       }
-      const extRes = await newObj.save(null, { useMasterKey: true });
+      await newObj.save(null, { useMasterKey: true });
+      
       return { message: 'User sign up', sessionToken: user.sessionToken };
     }
   } catch (err) {

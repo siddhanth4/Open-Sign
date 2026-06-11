@@ -5,10 +5,7 @@ import axios from "axios";
 import { NavLink, useNavigate, useLocation } from "react-router";
 import login_img from "../assets/images/login_img.svg";
 import { useWindowSize } from "../hook/useWindowSize";
-import ModalUi from "../primitives/ModalUi";
-import {
-  emailRegex,
-} from "../constant/const";
+import { emailRegex } from "../constant/const";
 import Alert from "../primitives/Alert";
 import { appInfo } from "../constant/appinfo";
 import { fetchAppInfo } from "../redux/reducers/infoReducer";
@@ -23,8 +20,7 @@ import { useTranslation } from "react-i18next";
 import SelectLanguage from "../components/pdf/SelectLanguage";
 
 function Login() {
-  const appName =
-    "OpenSign™";
+  const appName = "OpenSign™";
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
@@ -39,13 +35,10 @@ function Login() {
     loading: false,
     thirdpartyLoader: false,
   });
-  const [userDetails, setUserDetails] = useState({
-    Company: "",
-    Destination: ""
-  });
-  const [isModal, setIsModal] = useState(false);
+  
   const [image, setImage] = useState();
   const [errMsg, setErrMsg] = useState();
+
   useEffect(() => {
     handleUserExist();
     // eslint-disable-next-line
@@ -54,7 +47,6 @@ function Login() {
   const handleUserExist = async () => {
       checkUserExt();
   };
-
 
   const setLocalVar = (user) => {
     localStorage.setItem("accesstoken", user.sessionToken);
@@ -76,9 +68,7 @@ function Login() {
     const app = await getAppLogo();
     if (app?.error === "invalid_json") {
       setErrMsg(t("server-down", { appName: appName }));
-    } else if (
-      app?.user === "not_exist"
-    ) {
+    } else if (app?.user === "not_exist") {
       navigate("/addadmin");
     }
     if (app?.logo) {
@@ -92,6 +82,7 @@ function Login() {
       GetLoginData();
     }
   };
+
   const handleChange = (event) => {
     let { name, value } = event.target;
     if (name === "email") {
@@ -100,10 +91,9 @@ function Login() {
     setState({ ...state, [name]: value });
   };
 
-  const handleLogin = async (
-  ) => {
-    const email = state?.email
-    const password = state?.password
+  const handleLogin = async () => {
+    const email = state?.email;
+    const password = state?.password;
 
     if (!email || !password) {
       return;
@@ -111,30 +101,34 @@ function Login() {
     localStorage.removeItem("accesstoken");
     try {
       setState({ ...state, loading: true });
-      localStorage.setItem("appLogo", appInfo.applogo);
-      const _user = await Parse.Cloud.run("loginuser", { email, password });
-      if (!_user) {
-        setState({ ...state, loading: false });
-        return;
-      }
-      // Get extended user data (including 2FA status) using cloud function
+      localStorage.setItem("appLogo", appInfo?.applogo || "");
+      
+      const loggedInUser = await Parse.User.logIn(email, password);
+      const _user = loggedInUser.toJSON();
+      _user.sessionToken = loggedInUser.getSessionToken();
+
       try {
         await Parse.User.become(_user.sessionToken);
         setLocalVar(_user);
         await continueLoginFlow();
       } catch (error) {
         console.error("Error checking 2FA status:", error);
+        setState({ ...state, loading: false });
         showToast("danger", t("something-went-wrong-mssg"));
       }
     } catch (error) {
       console.error("Error while logging in user", error);
+      setState({ ...state, loading: false });
       if (error?.code === 1001) {
         showToast("danger", t("action-prohibited"));
+      } else if (error?.code === 101) {
+        showToast("danger", t("invalid-username-password-region") || "Invalid username/password");
       } else {
-        showToast("danger", t("invalid-username-password-region"));
+        showToast("danger", t("invalid-username-password-region") || "Invalid username/password");
       }
     }
   };
+
   const handleLoginBtn = async (event) => {
     event.preventDefault();
     if (!emailRegex.test(state.email)) {
@@ -144,123 +138,58 @@ function Login() {
     await handleLogin();
   };
 
-  const setThirdpartyLoader = (value) => {
-    setState({ ...state, thirdpartyLoader: value });
-  };
-
-  const thirdpartyLoginfn = async (sessionToken) => {
-    const baseUrl = localStorage.getItem("baseUrl");
-    const parseAppId = localStorage.getItem("parseAppId");
-    const res = await axios.get(baseUrl + "users/me", {
-      headers: {
-        "X-Parse-Session-Token": sessionToken,
-        "X-Parse-Application-Id": parseAppId
-      }
-    });
-    await Parse.User.become(sessionToken).then(() => {
-      window.localStorage.setItem("accesstoken", sessionToken);
-    });
-    if (res.data) {
-      let _user = res.data;
-      setLocalVar(_user);
-      // Check extended class user role and tenentId
-      try {
-        const userSettings = appInfo.settings;
-        const extUser = await Parse.Cloud.run("getUserDetails");
-        if (extUser) {
-          const IsDisabled = extUser?.IsDisabled || false;
-          if (!IsDisabled) {
-            const userRole = extUser?.UserRole;
-            const menu =
-              userRole && userSettings.find((menu) => menu.role === userRole);
-            if (menu) {
-              const _currentRole = userRole;
-              const redirectUrl =
-                location?.state?.from || `/${menu.pageType}/${menu.pageId}`;
-              const _role = _currentRole.replace("contracts_", "");
-              const extInfo = JSON.parse(JSON.stringify(extUser));
-              localStorage.setItem("_user_role", _role);
-              localStorage.setItem("Extand_Class", JSON.stringify([extUser]));
-              localStorage.setItem("userEmail", extInfo?.Email);
-              localStorage.setItem("username", extInfo?.Name);
-              if (extInfo?.TenantId) {
-                const tenant = {
-                  Id: extInfo?.TenantId?.objectId || "",
-                  Name: extInfo?.TenantId?.TenantName || ""
-                };
-                localStorage.setItem("TenantId", tenant?.Id);
-                dispatch(showTenant(tenant?.Name));
-                localStorage.setItem("TenantName", tenant?.Name);
-              }
-              localStorage.setItem("PageLanding", menu.pageId);
-              localStorage.setItem("defaultmenuid", menu.menuId);
-              localStorage.setItem("pageType", menu.pageType);
-                navigate(redirectUrl);
-            } else {
-              showToast("danger", t("role-not-found"));
-              logOutUser();
-            }
-          } else {
-            showToast("danger", t("do-not-access-contact-admin"));
-            logOutUser();
-          }
-        } else {
-          showToast("danger", t("user-not-found"));
-          logOutUser();
-        }
-      } catch (error) {
-        console.error("err in fetching extUser", err);
-        showToast("danger", `${err.message}`);
-        const payload = { sessionToken: _user.sessionToken };
-        handleSubmitbtn(payload);
-      } finally {
-        setThirdpartyLoader(false);
-      }
-    }
-  };
-
   const GetLoginData = async () => {
     setState({ ...state, loading: true });
     try {
       const user = await Parse.User.become(localStorage.getItem("accesstoken"));
       const _user = user.toJSON();
       setLocalVar(_user);
-      const userSettings = appInfo.settings;
+      
       const extUser = await Parse.Cloud.run("getUserDetails");
       if (extUser) {
-        // extUser is returned as a plain object from cloud function, so access properties directly
-        const IsDisabled = extUser?.IsDisabled || false;
+        // Ensure object is parsed correctly
+        const extInfo = typeof extUser.toJSON === "function" ? extUser.toJSON() : extUser;
+        const IsDisabled = extInfo?.IsDisabled || false;
+        
         if (!IsDisabled) {
-          const userRole = extUser?.UserRole;
-          const _currentRole = userRole;
-          const menu =
-            userRole && userSettings.find((menu) => menu.role === userRole);
-          if (menu) {
-            const extInfo = JSON.parse(JSON.stringify(extUser));
-            const _role = _currentRole.replace("contracts_", "");
-            localStorage.setItem("_user_role", _role);
-            const redirectUrl =
-              location?.state?.from || `/${menu.pageType}/${menu.pageId}`;
-            localStorage.setItem("Extand_Class", JSON.stringify([extUser]));
-            localStorage.setItem("userEmail", extInfo.Email);
-            localStorage.setItem("username", extInfo.Name);
-            if (extInfo?.TenantId) {
-              const tenant = {
-                Id: extInfo?.TenantId?.objectId || "",
-                Name: extInfo?.TenantId?.TenantName || ""
-              };
-              localStorage.setItem("TenantId", tenant?.Id);
-              dispatch(showTenant(tenant?.Name));
-              localStorage.setItem("TenantName", tenant?.Name);
-            }
-            localStorage.setItem("PageLanding", menu.pageId);
-            localStorage.setItem("defaultmenuid", menu.menuId);
-            localStorage.setItem("pageType", menu.pageType);
-              navigate(redirectUrl);
-          } else {
-            setState({ ...state, loading: false });
-            logOutUser();
+          const userRole = extInfo?.UserRole || "contracts_User"; // Safe fallback role
+          const userSettings = appInfo?.settings || [];
+          let menu = userSettings.find((m) => m.role === userRole);
+
+          // 🚀 FIX: Fallback to prevent "Role not found" crash
+          if (!menu) {
+            console.warn(`Menu mapping for role '${userRole}' not found. Using fallback.`);
+            menu = {
+              role: userRole,
+              pageType: "dashboard",
+              pageId: "home",
+              menuId: "default"
+            };
           }
+
+          const _role = userRole.replace("contracts_", "");
+          localStorage.setItem("_user_role", _role);
+          const redirectUrl = location?.state?.from || `/${menu.pageType}/${menu.pageId}`;
+          
+          localStorage.setItem("Extand_Class", JSON.stringify([extInfo]));
+          localStorage.setItem("userEmail", extInfo?.Email || "");
+          localStorage.setItem("username", extInfo?.Name || "");
+          
+          if (extInfo?.TenantId) {
+            const tenant = {
+              Id: extInfo?.TenantId?.objectId || extInfo?.TenantId?.id || "",
+              Name: extInfo?.TenantId?.TenantName || ""
+            };
+            localStorage.setItem("TenantId", tenant.Id);
+            dispatch(showTenant(tenant.Name));
+            localStorage.setItem("TenantName", tenant.Name);
+          }
+          
+          localStorage.setItem("PageLanding", menu.pageId);
+          localStorage.setItem("defaultmenuid", menu.menuId);
+          localStorage.setItem("pageType", menu.pageType);
+          navigate(redirectUrl);
+          
         } else {
           showToast("danger", t("do-not-access-contact-admin"));
           logOutUser();
@@ -271,6 +200,7 @@ function Login() {
       }
     } catch (error) {
       showToast("danger", t("something-went-wrong-mssg"));
+      setState({ ...state, loading: false });
       console.log("err", error);
     }
   };
@@ -279,53 +209,7 @@ function Login() {
     setState({ ...state, passwordVisible: !state.passwordVisible });
   };
 
-  const handleSubmitbtn = async (e) => {
-    e.preventDefault();
-    if (userDetails.Destination && userDetails.Company) {
-      setThirdpartyLoader(true);
-      const payload = { sessionToken: localStorage.getItem("accesstoken") };
-      const userInformation = JSON.parse(
-        localStorage.getItem("UserInformation")
-      );
-      if (payload && payload.sessionToken) {
-        const params = {
-          userDetails: {
-            name: userInformation.name,
-            email: userInformation.email,
-            phone: userInformation?.phone || "",
-            role: "contracts_User",
-            company: userDetails.Company,
-            jobTitle: userDetails.Destination,
-            timezone: usertimezone
-          }
-        };
-        const userSignUp = await Parse.Cloud.run("usersignup", params);
-        if (userSignUp && userSignUp.sessionToken) {
-          const LocalUserDetails = {
-            name: userInformation.name,
-            email: userInformation.email,
-            phone: userInformation?.phone || "",
-            company: userDetails.Company,
-            jobTitle: userDetails.JobTitle
-          };
-          localStorage.setItem("userDetails", JSON.stringify(LocalUserDetails));
-          thirdpartyLoginfn(userSignUp.sessionToken);
-        } else {
-          alert(userSignUp.message);
-        }
-      } else if (
-        payload &&
-        payload.message.replace(/ /g, "_") === "Internal_server_err"
-      ) {
-        alert(t("server-error"));
-      }
-    } else {
-      showToast("warning", t("fill-required-details!"));
-    }
-  };
-
   const logOutUser = async () => {
-    setIsModal(false);
     try {
       await Parse.User.logOut();
     } catch (err) {
@@ -353,47 +237,58 @@ function Login() {
 
   const continueLoginFlow = async () => {
     try {
-      const userSettings = appInfo.settings;
       const extUser = await Parse.Cloud.run("getUserDetails");
       if (extUser) {
-        const IsDisabled = extUser?.IsDisabled || false;
+        // Ensure object is parsed correctly whether it's a Parse.Object or plain JSON
+        const extInfo = typeof extUser.toJSON === "function" ? extUser.toJSON() : extUser;
+        const IsDisabled = extInfo?.IsDisabled || false;
+        
         if (!IsDisabled) {
-          const userRole = extUser?.UserRole;
-          const menu =
-            userRole && userSettings?.find((menu) => menu.role === userRole);
-          if (menu) {
-            const _currentRole = userRole;
-            const redirectUrl =
-              location?.state?.from || `/${menu.pageType}/${menu.pageId}`;
-            const _role = _currentRole.replace("contracts_", "");
-            localStorage.setItem("_user_role", _role);
-            const checkLanguage = extUser?.Language;
-            if (checkLanguage) {
-              checkLanguage && i18n.changeLanguage(checkLanguage);
-            }
-            const extInfo = extUser; // already a plain object
-            // Continue with storing user data and redirecting
-            localStorage.setItem("Extand_Class", JSON.stringify([extUser]));
-            localStorage.setItem("userEmail", extInfo.Email);
-            localStorage.setItem("username", extInfo.Name);
-            if (extInfo?.TenantId) {
-              const tenant = {
-                Id: extInfo?.TenantId?.objectId || "",
-                Name: extInfo?.TenantId?.TenantName || ""
-              };
-              localStorage.setItem("TenantId", tenant?.Id);
-              dispatch(showTenant(tenant?.Name));
-              localStorage.setItem("TenantName", tenant?.Name);
-            }
-            localStorage.setItem("PageLanding", menu.pageId);
-            localStorage.setItem("defaultmenuid", menu.menuId);
-            localStorage.setItem("pageType", menu.pageType);
-              setState({ ...state, loading: false });
-              navigate(redirectUrl);
-          } else {
-            setState({ ...state, loading: false });
-            setIsModal(true);
+          const userRole = extInfo?.UserRole || "contracts_User"; // Safe fallback
+          const userSettings = appInfo?.settings || [];
+          let menu = userSettings.find((m) => m.role === userRole);
+
+          // 🚀 FIX: Fallback instead of throwing "Role not found"
+          if (!menu) {
+            console.warn(`Menu mapping for role '${userRole}' not found. Using fallback.`);
+            menu = {
+              role: userRole,
+              pageType: "dashboard",
+              pageId: "home",
+              menuId: "default"
+            };
           }
+
+          const redirectUrl = location?.state?.from || `/${menu.pageType}/${menu.pageId}`;
+          const _role = userRole.replace("contracts_", "");
+          localStorage.setItem("_user_role", _role);
+          
+          const checkLanguage = extInfo?.Language;
+          if (checkLanguage) {
+            i18n.changeLanguage(checkLanguage);
+          }
+          
+          localStorage.setItem("Extand_Class", JSON.stringify([extInfo]));
+          localStorage.setItem("userEmail", extInfo?.Email || "");
+          localStorage.setItem("username", extInfo?.Name || "");
+          
+          if (extInfo?.TenantId) {
+            const tenant = {
+              Id: extInfo?.TenantId?.objectId || extInfo?.TenantId?.id || "",
+              Name: extInfo?.TenantId?.TenantName || ""
+            };
+            localStorage.setItem("TenantId", tenant.Id);
+            dispatch(showTenant(tenant.Name));
+            localStorage.setItem("TenantName", tenant.Name);
+          }
+          
+          localStorage.setItem("PageLanding", menu.pageId);
+          localStorage.setItem("defaultmenuid", menu.menuId);
+          localStorage.setItem("pageType", menu.pageType);
+          
+          setState({ ...state, loading: false });
+          navigate(redirectUrl);
+          
         } else {
           showToast("danger", t("do-not-access-contact-admin"));
           logOutUser();
@@ -404,6 +299,7 @@ function Login() {
       }
     } catch (error) {
       console.error("Error during login flow", error);
+      setState({ ...state, loading: false });
       showToast("danger", error.message || t("something-went-wrong-mssg"));
     }
   };
@@ -493,9 +389,9 @@ function Login() {
                                 onClick={togglePasswordVisibility}
                               >
                                 {state.passwordVisible ? (
-                                  <i className="fa-light fa-eye-slash text-xs pb-1" /> // Close eye icon
+                                  <i className="fa-light fa-eye-slash text-xs pb-1" />
                                 ) : (
-                                  <i className="fa-light fa-eye text-xs pb-1 " /> // Open eye icon
+                                  <i className="fa-light fa-eye text-xs pb-1 " />
                                 )}
                               </span>
                             </div>
@@ -534,7 +430,7 @@ function Login() {
                     <div className="mx-auto md:w-[300px] lg:w-[400px] xl:w-[500px]">
                       <img
                         src={login_img}
-                        alt="The image illustrates a person from behind, seated at a desk with a four-monitor computer setup, in an environment with a light blue and white color scheme, featuring a potted plant to the right."
+                        alt="Workspace illustration"
                         width="100%"
                       />
                     </div>
@@ -547,84 +443,6 @@ function Login() {
               <Alert type={state.alertType}>{state.alertMsg}</Alert>
             )}
           </div>
-          <ModalUi
-            isOpen={isModal}
-            title={t("additional-info")}
-            showClose={false}
-          >
-            <form className="px-4 py-3 text-base-content">
-              <div className="mb-3">
-                <label
-                  htmlFor="Company"
-                  style={{ display: "flex" }}
-                  className="block text-xs font-semibold"
-                >
-                  {t("company")}{" "}
-                  <span className="text-[red] text-[13px]">*</span>
-                </label>
-                <input
-                  type="text"
-                  className="op-input op-input-bordered op-input-sm focus:outline-none hover:border-base-content w-full text-xs"
-                  id="Company"
-                  value={userDetails.Company}
-                  onChange={(e) =>
-                    setUserDetails({
-                      ...userDetails,
-                      Company: e.target.value
-                    })
-                  }
-                  onInvalid={(e) =>
-                    e.target.setCustomValidity(t("input-required"))
-                  }
-                  onInput={(e) => e.target.setCustomValidity("")}
-                  required
-                />
-              </div>
-              <div className="mb-3">
-                <label
-                  htmlFor="JobTitle"
-                  style={{ display: "flex" }}
-                  className="block text-xs font-semibold"
-                >
-                  {t("job-title")}
-                  <span className="text-[red] text-[13px]">*</span>
-                </label>
-                <input
-                  type="text"
-                  className="op-input op-input-bordered op-input-sm focus:outline-none hover:border-base-content w-full text-xs"
-                  id="JobTitle"
-                  value={userDetails.Destination}
-                  onChange={(e) =>
-                    setUserDetails({
-                      ...userDetails,
-                      Destination: e.target.value
-                    })
-                  }
-                  onInvalid={(e) =>
-                    e.target.setCustomValidity(t("input-required"))
-                  }
-                  onInput={(e) => e.target.setCustomValidity("")}
-                  required
-                />
-              </div>
-              <div className="mt-4 gap-2 flex flex-row">
-                <button
-                  type="button"
-                  className="op-btn op-btn-primary"
-                  onClick={(e) => handleSubmitbtn(e)}
-                >
-                  {t("login")}
-                </button>
-                <button
-                  type="button"
-                  className="op-btn op-btn-ghost text-base-content"
-                  onClick={logOutUser}
-                >
-                  {t("cancel")}
-                </button>
-              </div>
-            </form>
-          </ModalUi>
         </>
       ) : (
         <div

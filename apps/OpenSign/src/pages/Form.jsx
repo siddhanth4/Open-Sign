@@ -364,26 +364,16 @@ const Forms = (props) => {
       return false;
     }
   }
+  
   const handleSubmit = withSessionValidation(async (e) => {
     e.preventDefault();
     e.stopPropagation();
     if (fileupload) {
-      if (formData?.Name?.length > maxTitleLength) {
-        alert(t("title-length-alert"));
-        return;
-      }
-      if (formData?.Note?.length > maxNoteLength) {
-        alert(t("note-length-alert"));
-        return;
-      }
-      if (formData?.Description?.length > maxDescriptionLength) {
-        alert(t("description-length-alert"));
-        return;
-      }
-      if (formData.RedirectUrl && !isValidURL(formData?.RedirectUrl)) {
-        alert(t("invalid-redirect-url"));
-        return;
-      }
+      if (formData?.Name?.length > maxTitleLength) { alert(t("title-length-alert")); return; }
+      if (formData?.Note?.length > maxNoteLength) { alert(t("note-length-alert")); return; }
+      if (formData?.Description?.length > maxDescriptionLength) { alert(t("description-length-alert")); return; }
+      if (formData.RedirectUrl && !isValidURL(formData?.RedirectUrl)) { alert(t("invalid-redirect-url")); return; }
+      
       setIsSubmit(true);
       try {
         const currentUser = Parse.User.current();
@@ -391,114 +381,76 @@ const Forms = (props) => {
         object.set("Name", formData?.Name);
         object.set("Description", formData?.Description);
         object.set("Note", formData?.Note);
+        
         if (props.title === "Request Signatures") {
-            if (
-              extUserData?.TenantId?.RequestBody &&
-              extUserData?.TenantId?.RequestSubject
-            ) {
+            if (extUserData?.TenantId?.RequestBody && extUserData?.TenantId?.RequestSubject) {
               object.set("RequestBody", extUserData?.TenantId?.RequestBody);
-              object.set(
-                "RequestSubject",
-                extUserData?.TenantId?.RequestSubject
-              );
-              object.set(
-                "EmailEditorType",
-                extUserData?.TenantId?.EmailEditorType
-              );
+              object.set("RequestSubject", extUserData?.TenantId?.RequestSubject);
+              object.set("EmailEditorType", extUserData?.TenantId?.EmailEditorType);
             }
         }
+        
         if (props.title !== "Sign Yourself") {
           const isChecked = formData.SendinOrder === "false" ? false : true;
-          const isTourEnabled =
-            formData?.IsTourEnabled === "false" ? false : true;
+          const isTourEnabled = formData?.IsTourEnabled === "false" ? false : true;
           const remindOnceInEvery = parseInt(formData.remindOnceInEvery);
           const TimeToCompleteDays = parseInt(formData?.TimeToCompleteDays);
           const AutomaticReminders = formData.autoreminder;
           const reminderCount = TimeToCompleteDays / remindOnceInEvery;
-          if (AutomaticReminders && reminderCount > 15) {
-            alert(t("only-15-reminder-allowed"));
-            return;
-          }
+          if (AutomaticReminders && reminderCount > 15) { alert(t("only-15-reminder-allowed")); return; }
+          
           object.set("SendinOrder", isChecked);
           object.set("AutomaticReminders", AutomaticReminders);
           object.set("RemindOnceInEvery", remindOnceInEvery);
           object.set("IsTourEnabled", isTourEnabled);
           object.set("TimeToCompleteDays", TimeToCompleteDays);
           object.set("PenColors", selectedColors);
-
-            object.set("AllowModifications", false);
-            object.set("IsEnableOTP", false);
-            if (formData.NotifyOnSignatures !== undefined) {
-              object.set("NotifyOnSignatures", formData.NotifyOnSignatures);
-            }
-          if (formData?.RedirectUrl) {
-            object.set("RedirectUrl", formData.RedirectUrl);
-          }
+          object.set("AllowModifications", false);
+          object.set("IsEnableOTP", false);
+          if (formData.NotifyOnSignatures !== undefined) object.set("NotifyOnSignatures", formData.NotifyOnSignatures);
+          if (formData?.RedirectUrl) object.set("RedirectUrl", formData.RedirectUrl);
         }
+        
         object.set("URL", fileupload);
         object.set("CreatedBy", Parse.User.createWithoutData(currentUser.id));
+        
         if (folder && folder.ObjectId) {
-          object.set("Folder", {
-            __type: "Pointer",
-            className: props.Cls,
-            objectId: folder.ObjectId
-          });
+          object.set("Folder", { __type: "Pointer", className: props.Cls, objectId: folder.ObjectId });
         }
-        if (signers && signers.length > 0) {
-          object.set("Signers", signers);
-        }
+        if (signers && signers.length > 0) object.set("Signers", signers);
         if (bcc && bcc.length > 0) {
-          const Bcc = bcc.map((x) => ({
-            __type: "Pointer",
-            className: "contracts_Contactbook",
-            objectId: x.objectId
-          }));
+          const Bcc = bcc.map((x) => ({ __type: "Pointer", className: "contracts_Contactbook", objectId: x.objectId }));
           object.set("Bcc", Bcc);
         }
-        const ExtCls = JSON.parse(localStorage.getItem("Extand_Class"));
-        object.set("ExtUserPtr", {
-          __type: "Pointer",
-          className: "contracts_Users",
-          objectId: ExtCls[0].objectId
-        });
-        if (extUserData?.UseNameAsSender) {
-          const senderName = extUserData?.Name || "";
-          const senderMail = extUserData?.Email || "";
-          if (senderName) {
-            object.set("SenderName", senderName);
-          }
-          if (senderMail) {
-            object.set("SenderMail", senderMail);
-          }
+        
+        const ExtCls = JSON.parse(localStorage.getItem("Extand_Class")) || [];
+        if (ExtCls.length > 0) {
+            object.set("ExtUserPtr", { __type: "Pointer", className: "contracts_Users", objectId: ExtCls[0].objectId });
+            
+            // Safely attach TenantId & OrganizationId to prevent Permission Errors
+            const safeTenantId = ExtCls[0]?.TenantId?.objectId || localStorage.getItem("TenantId");
+            const safeOrgId = ExtCls[0]?.OrganizationId?.objectId || safeTenantId;
+            
+            if (safeTenantId) object.set("TenantId", { __type: "Pointer", className: "partners_Tenant", objectId: safeTenantId });
+            if (safeOrgId) object.set("OrganizationId", { __type: "Pointer", className: "contracts_Organizations", objectId: safeOrgId });
         }
+
+        if (extUserData?.UseNameAsSender) {
+          if (extUserData?.Name) object.set("SenderName", extUserData.Name);
+          if (extUserData?.Email) object.set("SenderMail", extUserData.Email);
+        }
+        
         const res = await object.save();
+        
         if (res) {
           setSigners([]);
           setBcc([]);
           setSelectedColors(pensList);
           setFolder({ ObjectId: "", Name: "" });
-          const notifySign =
-                extUserData?.NotifyOnSignatures !== undefined
-                ? extUserData?.NotifyOnSignatures
-                : true;
           setFormData({
-            Name: "",
-            Description: "",
-            Note:
-              props.title === "Sign Yourself"
-                ? "Note to myself"
-                : "Please review and sign this document",
-            TimeToCompleteDays: 15,
-            SendinOrder: sendinorder,
-            password: "",
-            file: "",
-            NotifyOnSignatures: notifySign,
-            remindOnceInEvery: 5,
-            autoreminder: false,
-            IsEnableOTP: "false",
-            IsTourEnabled: istourenabled,
-            RedirectUrl: "",
-            AllowModifications: false,
+            Name: "", Description: "", Note: props.title === "Sign Yourself" ? "Note to myself" : "Please review and sign this document",
+            TimeToCompleteDays: 15, SendinOrder: sendinorder, password: "", file: "", NotifyOnSignatures: true,
+            remindOnceInEvery: 5, autoreminder: false, IsEnableOTP: "false", IsTourEnabled: istourenabled, RedirectUrl: "", AllowModifications: false,
           });
           setFileUpload("");
           setSelectedFiles([]);
@@ -507,19 +459,8 @@ const Forms = (props) => {
         }
       } catch (err) {
         console.log("err ", err);
-        if (err?.code === 209) {
-          dispatch(sessionStatus(false));
-        } else if (err.message === "only 15 reminder allowed") {
-          setIsAlert({
-            type: "danger",
-            message: t("only-15-reminder-allowed")
-          });
-        } else {
-          setIsAlert({
-            type: "danger",
-            message: t("something-went-wrong-mssg")
-          });
-        }
+        if (err?.code === 209) dispatch(sessionStatus(false));
+        else setIsAlert({ type: "danger", message: err.message || t("something-went-wrong-mssg") });
       } finally {
         setTimeout(() => setIsAlert({ type: "success", message: "" }), 1000);
         setIsSubmit(false);

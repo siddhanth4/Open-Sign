@@ -414,7 +414,7 @@ function Login() {
                         {state.loading ? t("loading") : t("login")}
                       </button>
                     </div>
-                    <div className="text-center mt-4 text-xs">
+                    {/* <div className="text-center mt-4 text-xs">
                       <span className="text-gray-600">{t("dont-have-account") || "Don't have an account?"} </span>
                       <NavLink
                         to="/addadmin"
@@ -422,7 +422,7 @@ function Login() {
                       >
                         {t("sign-up") || "Sign up"}
                       </NavLink>
-                    </div>
+                    </div> */}
                   </form>
                 </div>
                 {width >= 768 && (

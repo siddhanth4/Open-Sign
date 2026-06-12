@@ -1,12 +1,14 @@
 import axios from 'axios';
 import { cloudServerUrl, serverAppId } from '../../Utils.js';
-const serverUrl = cloudServerUrl; //process.env.SERVER_URL;
+const serverUrl = cloudServerUrl; 
 const APPID = serverAppId;
 const masterKEY = process.env.MASTER_KEY;
+
 async function addTeamAndOrg(extUser) {
   try {
     const extUserCls = new Parse.Query('contracts_Users');
     const updateUser = await extUserCls.get(extUser.objectId, { useMasterKey: true });
+    
     if (updateUser && !updateUser?.get('OrganizationId')) {
       const orgCls = new Parse.Object('contracts_Organizations');
       orgCls.set('Name', extUser.Company);
@@ -28,6 +30,7 @@ async function addTeamAndOrg(extUser) {
       });
 
       const orgRes = await orgCls.save(null, { useMasterKey: true });
+      
       const teamCls = new Parse.Object('contracts_Teams');
       teamCls.set('Name', 'All Users');
       teamCls.set('OrganizationId', {
@@ -37,8 +40,7 @@ async function addTeamAndOrg(extUser) {
       });
       teamCls.set('IsActive', true);
       const teamRes = await teamCls.save(null, { useMasterKey: true });
-      // const updateUser = new Parse.Object('contracts_Users');
-      // updateUser.id = extUser.objectId;
+      
       updateUser.set('UserRole', 'contracts_Admin');
       updateUser.set('OrganizationId', {
         __type: 'Pointer',
@@ -52,7 +54,7 @@ async function addTeamAndOrg(extUser) {
           objectId: teamRes.id,
         },
       ]);
-      const extUserRes = await updateUser.save(null, { useMasterKey: true });
+      await updateUser.save(null, { useMasterKey: true });
     }
   } catch (err) {
     console.log('err in add team, role, org', err);
@@ -79,7 +81,6 @@ async function saveUser(userDetails) {
       },
     });
     const login = await axiosRes.data;
-    // console.log("login ", login);
     return { id: login.objectId, sessionToken: login.sessionToken };
   } else {
     const user = new Parse.User();
@@ -92,12 +93,16 @@ async function saveUser(userDetails) {
     user.set('name', userDetails.name);
 
     const res = await user.signUp();
-    // console.log("res ", res);
     return { id: res.id, sessionToken: res.getSessionToken() };
   }
 }
+
 export default async function AddAdmin(request) {
   const userDetails = request.params.userDetails;
+  
+  // Force Admin Role
+  userDetails.role = 'contracts_Admin';
+  
   const user = await saveUser(userDetails);
 
   try {
@@ -108,8 +113,9 @@ export default async function AddAdmin(request) {
       objectId: user.id,
     });
     const extUser = await extQuery.first({ useMasterKey: true });
+    
     if (extUser) {
-      return { message: 'User already exist' };
+      return { message: 'Login successful', sessionToken: user.sessionToken };
     } else {
       const partnerQuery = new Parse.Object('partners_Tenant');
       partnerQuery.set('UserId', {
@@ -145,7 +151,27 @@ export default async function AddAdmin(request) {
         partnerQuery.set('Address', userDetails.address);
       }
       const tenantRes = await partnerQuery.save(null, { useMasterKey: true });
-      // console.log("tenantRes ", tenantRes);
+      
+      // Generate TenantCredits automatically so uploads are never blocked
+      const TenantCredits = Parse.Object.extend("partners_TenantCredits");
+      const tenantCredits = new TenantCredits();
+      tenantCredits.set("PartnersTenant", {
+        __type: "Pointer",
+        className: "partners_Tenant",
+        objectId: tenantRes.id
+      });
+      tenantCredits.set("AllowedStorage", 5000000000); // 5GB limit
+      tenantCredits.set("UsedStorage", 0);
+      tenantCredits.set("AllowedUsers", 100);
+      
+      const acl = new Parse.ACL();
+      acl.setPublicReadAccess(false);
+      acl.setPublicWriteAccess(false);
+      acl.setReadAccess(user.id, true);
+      acl.setWriteAccess(user.id, true);
+      tenantCredits.setACL(acl);
+      await tenantCredits.save(null, { useMasterKey: true });
+
       const newObj = new Parse.Object('contracts_Users');
       newObj.set('UserId', {
         __type: 'Pointer',
@@ -173,7 +199,8 @@ export default async function AddAdmin(request) {
         newObj.set('Timezone', userDetails?.timezone);
       }
       const extRes = await newObj.save(null, { useMasterKey: true });
-      const extUser = {
+      
+      const extUserObj = {
         objectId: extRes.id,
         Name: userDetails.name,
         Email: userDetails.email?.toLowerCase()?.replace(/\s/g, ''),
@@ -184,7 +211,9 @@ export default async function AddAdmin(request) {
         Company: userDetails.company,
         JobTitle: userDetails.jobTitle,
       };
-      await addTeamAndOrg(extUser);
+      
+      await addTeamAndOrg(extUserObj);
+      
       return { message: 'User sign up', sessionToken: user.sessionToken };
     }
   } catch (err) {

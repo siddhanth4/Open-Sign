@@ -1,54 +1,40 @@
 import axios from "axios";
 import { serverUrl_fn } from "./appinfo";
-const parseAppId = process.env.REACT_APP_APPID
-  ? process.env.REACT_APP_APPID
-  : "opensign";
+const parseAppId = process.env.REACT_APP_APPID ? process.env.REACT_APP_APPID : "opensign";
 const serverUrl = serverUrl_fn();
-const commonheader = {
+
+// Dynamically fetch headers so it ALWAYS includes the Session Token
+const getHeaders = () => ({
   "Content-Type": "application/json",
-  "X-Parse-Application-Id": parseAppId
-};
+  "X-Parse-Application-Id": parseAppId,
+  "X-Parse-Session-Token": localStorage.getItem("accesstoken")
+});
+
 export const SaveFileSize = async (size, imageUrl, tenantId, userId) => {
-  //checking server url and save file's size
+  const safeTenantId = tenantId || localStorage.getItem("TenantId") || JSON.parse(localStorage.getItem("Extand_Class") || "[]")?.[0]?.TenantId?.objectId;
+  
   const tenantPtr = {
     __type: "Pointer",
     className: "partners_Tenant",
-    objectId: tenantId
+    objectId: safeTenantId
   };
-  const UserPtr = userId && {
-    __type: "Pointer",
-    className: "_User",
-    objectId: userId
-  };
+  const UserPtr = userId ? { __type: "Pointer", className: "_User", objectId: userId } : null;
   const _tenantPtr = JSON.stringify(tenantPtr);
+  
   try {
     const res = await axios.get(
       `${serverUrl}/classes/partners_TenantCredits?where={"PartnersTenant":${_tenantPtr}}`,
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "X-Parse-Application-Id": parseAppId
-        }
-      }
+      { headers: getHeaders() } 
     );
     const response = res.data.results;
-    let data;
     if (response && response.length > 0) {
-      data = {
-        usedStorage: response[0].usedStorage
-          ? response[0].usedStorage + size
-          : size
+      const data = {
+        usedStorage: response[0].usedStorage ? response[0].usedStorage + size : size
       };
-      await axios.put(
-        `${serverUrl}/classes/partners_TenantCredits/${response[0].objectId}`,
-        data,
-        { headers: commonheader }
-      );
+      await axios.put(`${serverUrl}/classes/partners_TenantCredits/${response[0].objectId}`, data, { headers: getHeaders() });
     } else {
-      data = { usedStorage: size, PartnersTenant: tenantPtr };
-      await axios.post(`${serverUrl}/classes/partners_TenantCredits`, data, {
-        headers: commonheader
-      });
+      const data = { usedStorage: size, PartnersTenant: tenantPtr, AllowedStorage: 5000000000, AllowedUsers: 100 };
+      await axios.post(`${serverUrl}/classes/partners_TenantCredits`, data, { headers: getHeaders() });
     }
   } catch (err) {
     console.log("err in save usage", err);
@@ -56,7 +42,6 @@ export const SaveFileSize = async (size, imageUrl, tenantId, userId) => {
   saveDataFile(size, imageUrl, tenantPtr, UserPtr);
 };
 
-//function for save fileUrl and file size in particular client db class partners_DataFiles
 const saveDataFile = async (size, imageUrl, tenantPtr, UserId) => {
   const data = {
     FileUrl: imageUrl,
@@ -65,9 +50,7 @@ const saveDataFile = async (size, imageUrl, tenantPtr, UserId) => {
     ...(UserId ? { UserId: UserId } : {})
   };
   try {
-    await axios.post(`${serverUrl}/classes/partners_DataFiles`, data, {
-      headers: commonheader
-    });
+    await axios.post(`${serverUrl}/classes/partners_DataFiles`, data, { headers: getHeaders() }); 
   } catch (err) {
     console.log("err in save usage ", err);
   }
